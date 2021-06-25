@@ -1,0 +1,231 @@
+---
+title: "FRAMINGHAM HEART STUDY"
+author: "Jenny Wang"
+date: "10/25/2019"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##### First steps
+```{r, results="hide", message=FALSE}
+# Load data
+library(foreign)
+library(dplyr)
+```
+```{r}
+setwd("xx")
+
+data <- read.dta("data")
+
+# Subset the covariates we need for this assignment
+data <- data %>%
+  select(death, age, agecat, bmi, sex)
+
+# Omit rows with missing data
+data <- data[complete.cases(data), ]
+
+# Reassign indicators for sex
+data$sex <- ifelse(data$sex=="1", 0, 1)
+data <- data[order(data$bmi), ]
+
+# Initial overview of data
+summary(data)
+```
+There are 4,415 observations and 4 covariates, of which `age` and `bmi` are continuous, `agecat` is ordinal, and `sex` is binary categorical. the outcome variable is `death` and is binary categorical.
+
+##### Linear logistic model
+```{r}
+# Simple logistic regression model
+fit_1a <- glm(death ~ bmi, family="binomial", data=data)
+summary(fit_1a)
+
+# Odds
+exp(coefficients(fit_1a)[1])
+
+# Odds ratio
+exp(coefficients(fit_1a)[2])
+
+# 95% confidence interval
+confint(fit_1a, level=0.95)
+
+# Odds ratio 95% confidence interval
+exp(confint(fit_1a, parm="bmi"))
+
+# Odds ratio (5-unit increase)
+exp(5*coefficients(fit_1a)[2])
+
+# Odd ratio 95% confidence interval (5-unit increase)
+exp(5*confint(fit_1a, parm="bmi"))
+```
+
+From this simple logistic regression model, the intercept term (\( \beta_{0} \)) is -1.950, and the slope term (\( \beta_{1} \)) for continuous BMI is 0.051. The log odds of death in the population where BMI = 0 is -1.950. The odds of death is therefore \( e^{-1.950} \) = 0.142. The log odds ratio of death among the population comparing patients of a particular BMI to patients with BMI 1 \( kg/m^{2} \) lower is 0.051 (_p_ < 0.001). To interpret this estimate, suppose patient A had a BMI of _x_ + 1 \( kg/m^{2} \), and patient B had a BMI of _x_ \( kg/m^{2} \), the odds in favor of death for patient A versus patient B are \( e^{0.051} \) = 1.052. In other words, patient A has 5.2% higher odds of death than patient B. The odds ratio for the effect of a 5-unit change in BMI is \( e^{5 \times 0.051} \) = 1.290. Suppose patient C had a BMI of _x_ + 5 \( kg/m^{2} \). Here, the odds in favor of death for patient C versus patient B are 1.290. In other words, patient C has 29.0% higher odds of death than patient B.
+
+The 95% confidence interval for \( \beta_{1} \) is (0.036, 0.066), meaning that the 95% confidence interval for the odds ratio comparing patients with a particular BMI to patients with BMI 1 \( kg/m^{2} \) lower is (\( e^{0.036} \), \( e^{0.066} \)) = (1.037, 1.068). We have 95% confidence that the population odds ratio of the effect of a 1-unit change in BMI lies in this interval. The effect of a 5-unit change in BMI would have a 95% confidence interval of (\( e^{5 \times 0.036} \), \( e^{5 \times 0.066} \)) = (1.197, 1.391).
+
+##### Quadratic logistic model
+```{r}
+# Linear logistic model: see Question 1a)
+
+# Quadratic logistic model
+fit_1b <- glm(death ~ bmi + I(bmi^2), family="binomial", data=data)
+summary(fit_1b)
+```
+The model containing only the linear BMI term is nested within the model containing both the linear and quadratic BMI terms, as the linear model is equivalent to setting the coefficient of quadratic term to zero in the fuller model. We can use the Wald test to determine whether the quadratic term is needed (since we only need to see whether a single predictor - quadratic BMI - is needed; to test for a group of predictors we would use likelihood ratio tests). From the summary statistics of the fuller model, we see that the _p_-value for the slope estimate of quadratic BMI is not less than 0.05. We fail to reject the null hypothesis at the \( \alpha \) = 0.05 level and conclude that the slope for `I(BMI^2)` is not significantly different from 0. There does not exist a statistically significant association between mortality and quadratic BMI. As such, we do not need to include a quadratic BMI term in our model; the linear logistic regression model is sufficient.
+
+By introducing quadratic BMI into the model, both the slope and intercept estimates for linear BMI are different from the simple linear model. The linear BMI is also shown to no longer have a significant effect on mortality (_p_ > 0.05). Linear and quadratic BMI are highly correlated as the latter is a function of the former. Such collinearity tends to output high _p_-values when it comes to model selection and make it difficult to estimate and interpret the coefficients for these terms. This gives us more reason to remove the quadratic BMI term and keep the model linear.
+
+```{r}
+# Compare the fitted values on a plot
+plot(x=data$bmi, y=data$death,
+     main="Patient death versus continuous BMI",
+     xlab="BMI (kg/m^2)", ylab="Death")
+lines(data$bmi, fit_1a$fitted.values, col="red")
+lines(data$bmi, fit_1b$fitted.values, col="blue")
+```
+
+From the overlaid plot, the red line represents the results from the linear model, and the blue line represents those from the quadratic model. The fitted probabilities of the two models are very similar and almost coincide with each other. This serves as further evidence that we only need to include linear BMI in our model, which is also more interpretable than including the quadratic term.
+
+##### Odds
+`E[death | bmi + bmi^2] = -1.648 + 0.029bmi + 0.00039bmi^2`
+
+\(logOdds_{20}\) = -1.648 + 0.029(20) + 0.00039(\(20^{2}\)) = -0.912
+   
+\(odds_{20}\) = \(e^{-0.912}\) = 0.402
+
+\(logOdds_{25}\) = -1.648 + 0.029(25) + 0.00039(\(25^{2}\)) = -0.649
+   
+\(odds_{25}\) = \(e^{-0.649}\) = 0.522
+              
+OR = 0.522/0.402 = **1.301**
+
+**A 25 year old patient has 30.1% times higher odds of death compared to a 20 year old patient.**
+
+\(logOdds_{30}\) = -1.648 + 0.029(30) + 0.00039(\(30^{2}\)) = -0.427
+
+\(odds_{30}\) = \(e^{-0.427}\) = 0.652
+
+\(logOdds_{35}\) = -1.648 + 0.029(35) + 0.00039(\(35^{2}\)) = -0.155
+
+\(odds_{35}\) = \(e^{-0.155}\) = 0.856
+
+OR = 0.856/0.652 = **1.312**
+
+**A 35 year old patient has 31.2% times higher odds of death compared to a 30 year old patient.**
+
+##### Effects of BMI
+```{r}
+# Boxplot of BMI vs. sex
+boxplot(bmi ~ sex, data=data,
+        main="BMI versus sex",
+        xlab="sex", ylab="BMI (kg/m^2)", xaxt="n")
+axis(side=1, at=c(1, 2), labels=c("Male", "Female"))
+```
+
+From the boxplot, we see that females have a slightly lower median BMI than males. Females also have a larger spread of BMI values. However, it is not clear from the boxplot alone whether there is a significant difference in BMI between males and females.
+
+```{r}
+# Equal variance t-test
+t.test(bmi ~ factor(sex, labels=c("Male", "Female")), data=data, var.equal=TRUE)
+```
+
+From the two-sample equal variance _t_-test, the mean BMI in males is 26.170 \( kg/m^{2} \), and the mean BMI in females is 25.593 \( kg/m^{2} \). The _t_-statistic is 4.647, with a 95% confidence interval ranging from 0.334 to 0.820. The _p_-value is \(3.464 \times 10^{-6}\) (< 0.001), which indicates there is a significant difference in the means. In other words, there is a significant difference between mean BMI in males and females. We reject the null hypothesis.
+
+```{r}
+# Simple linear regression model
+fit_1d_prelim <- lm(bmi ~ I(sex), data=data)
+summary(fit_1d_prelim)
+confint(fit_1d_prelim)
+```
+
+The simple linear model shows a slope of -0.577, meaning that on average, BMI lowers by 0.577 \( kg/m^{2} \) when we switch from male patients to female patients. The 95% confidence interval of the slope ranges from -0.820 to -0.333, indicating that if sampled repeatedly, 95% of confidence intervals would contain the true slope parameter of the population. The _p_-value is \(3.464 \times 10^{-6}\), which is less than 0.05. The simple linear model shows a significant difference in BMI between males and females. Therefore, we reject the null hypothesis.
+
+Both the equal variance _t_-test and the simple linear model produced the same _p_-value, the same absolute values of the 95% confidence interval, and the same degrees of freedom (df = 525). These statistics are indicators that there is a significant difference in BMI between males and females.
+
+```{r, warning=FALSE}
+# Regress death on BMI: see Question 1a)
+
+# Does the effect of sex confound the effect of BMI?
+fit_1d_confound <- lm(death ~ bmi + sex, family="binomial", data=data)
+summary(fit_1d_confound)
+```
+
+After including both BMI and sex in the logistic regression model, the slope estimate for BMI changes from 0.051 to 0.010. We conclude that sex confounds the effect of BMI as this is a 410% change. Conceptually, this makes intuitive sense as sex is associated with BMI (exposure) as well as death (outcome), and sex is not a downstream consequence in the causal pathway between BMI and death.
+
+```{r}
+# Does the effect of sex modify the effect of BMI?
+fit_1d_modify <- glm(death ~ bmi + sex + bmi:sex, family="binomial", data=data)
+summary(fit_1d_modify)
+```
+
+As seen from the logistic regression model, regressing death on BMI with interaction between BMI and sex produces a significant difference between the two sexes (_p_ < 0.001). Conceptually, the effect of BMI depends on sex (eg. males and females tend to have different BMI values). Therefore, sex is an effect modifier as the effect of BMI on death is higher in males than in females. The effect of BMI and the effect of sex depend on one another. They do not act independently on death.
+
+Since sex is an effect modifier of BMI, we should report the effect of BMI on death separately for males and females:
+
+Regression line for males: `E[death | bmi, sex=0, bmi:sex=0] = -0.510 + 0.009bmi`. This gives an odds of death of \(e^{-0.510}\) = 0.600, and an odds ratio of death of \(e^{0.009}\) = 1.009 comparing a male of a particular BMI with another male of BMI that is 1 \(kg/m^{2}\) lower.
+
+Regression line for females: `E[death | bmi, sex=1, bmi:sex=1] = -2.658 + 0.066bmi`. This gives an odds of death of \(e^{-2.658}\) = 0.070, and an odds ratio of death of \(e^{0.066}\) = 1.068 comparing a female of a particular BMI with another female of BMI that is 1 \(kg/m^{2}\) lower.
+
+From the logistic regression analyses, we see that males have a higher odds of death if we predict with BMI; however, the effect of BMI on death is greater in females than males, as reflected by the higher odds ratio.
+
+##### Effects of age
+```{r}
+# Death vs. continuous age
+fit_1e_cont <- glm(death ~ age, family="binomial", data=data)
+summary(fit_1e_cont)
+
+# Death vs. categorical age
+fit_1e_cat <- glm(death ~ as.factor(agecat), family="binomial", data=data)
+summary(fit_1e_cat)
+
+# Death vs. ordinal age
+fit_1e_ord <- glm(death ~ agecat, family="binomial", data=data)
+summary(fit_1e_ord)
+```
+
+From the model regressing mortality on continuous age, we see that among the population of patients of a particular age, the odds of death are estimated to be \(e^{0.115}\) = 1.122 times greater than the odds among the population of patients who are one year younger (_p_ < 0.001).
+
+From the model regressing mortality on categorical age, we see that the odds of death are estimated to be \(e^{0.850}\) = 2.340 times
+greater for patients between ages 40 and 50 than for patients younger than 40 (_p_ < 0.001). The odds of death are estimated to be \(e^{1.788}\) = 5.977 times greater for patients between ages 50 and 60 than for patients younger than 40 (_p_ < 0.001). The odds of death are estimated to be \(e^{3.004}\) = 20.166 times greater for patients 60 or older than for patients younger than 40 (_p_ < 0.001).
+
+If we assume that the association between categorical age and the log odds of death changes linearly from one age category to the next, we would have a more parsimonious model than the previous indicator model. From this model, we see that the odds of death for patients in a particular age category are estimated to be \(e^{1.024}\) = 2.784 times greater than the odds for patients in the previous (younger) age category.
+
+```{r}
+# Likelihood ratio tests
+anova(fit_1e_cat, fit_1e_ord, test="Chisq")
+```
+
+From the likelihood ratio test comparing the model with categorical age and the one with ordinal age, we do not reject the null hypothesis and conclude that the reduced ordinal model does not provide a significantly better fit than the full categorical model (_p_ = 0.053). However, this _p_-value is so close to 0.05 that some (such as myself) may argue either model is effective in predicting death using age. I especially like the ordinal model because it is more parsimonious than the categorical model. For now we will proceed with the ordinal model.
+
+Next, we compared the model with continuous age to the one with ordinal age by assessing the AIC. The AIC of the continuous model is 4910.3, and the AIC of the ordinal model is 4996.6. We conclude that the model with continuous age is better as it has a smaller AIC.
+
+##### Confounding
+```{r}
+# Does the effect of age confound the effect of BMI?
+fit_1f_confound <- glm(death ~ bmi + agecat, family="binomial", data=data)
+summary(fit_1f_confound)
+```
+
+We continue to build our logistic regression model using ordinal age as we have determined in the previous question that it is a more parsimonious approach than using categorical age.
+
+After including both BMI and ordinal age, the slope estimate for BMI changes from 0.051 to 0.030. We conclude that ordinal age confounds the effect of BMI as this is a 41.2% change. Conceptually, this makes intuitive sense as age is associated with BMI (exposure; older people have slower fat metabolism thus higher BMI) as well as death (outcome; older people have a higher chance of dying), and age is not a downstream consequence in the causal pathway between BMI and death.
+
+```{r}
+# Does the effect of age modify the effect of BMI?
+fit_1f_modify <- glm(death ~ bmi + agecat + bmi:agecat, family="binomial", data=data)
+summary(fit_1f_modify)
+```
+
+As seen from the logistic regression model, regressing death on BMI with interaction between BMI and ordinal age does not produce a significant difference across the age categories (_p_ = 0.832). Therefore, age is not an effect modifier of BMI. The effect of BMI and the effect of age do not depend on one another and act independently on death. As such, we do not need to report the odds of death separately for different age categories. We can run a reduced model including only continuous BMI and ordinal age.
+
+```{r}
+fit_1f_final <- fit_1f_confound
+summary(fit_1f_final)
+```
+
+From this logistic regression model, the intercept term (\( \beta_{0} \)) is -4.083, the slope term (\( \beta_{1} \)) for continuous BMI is 0.030. The log odds of death in the population 40 or younger where BMI = 0 is -4.083. The odds of death is therefore \( e^{-4.083} \) = 0.017. The log odds ratio of death among the population comparing patients of a particular BMI to patients with BMI 1 \( kg/m^{2} \) lower is 0.030 (_p_ < 0.001). To interpret this estimate, suppose patient A had a BMI of _x_ + 1 \( kg/m^{2} \), and patient B had a BMI of _x_ \( kg/m^{2} \). Holding all other covariates constant, the odds in favor of death for patient A versus patient B are \( e^{0.030} \) = 1.030. In other words, patient A has 3.0% higher odds of death than patient B. The log odds ratio of death among the population comparing patients of a particular age category to patients with 1 category (_ie._ 10 years) lower is 1.010 (_p_ < 0.001). To interpret this estimate, suppose patient A had an age category of 2, and patient B had age category of 1. Holding all other covariates constant, the odds in favor of death for patient A versus patient B are \( e^{1.010} \) = 2.745. In other words, patient A has 174.5% higher odds of death than patient B.
